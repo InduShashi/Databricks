@@ -1,0 +1,62 @@
+import org.apache.spark.api.java.JavaRDD;
+import org.apache.spark.api.java.JavaSparkContext;
+import org.apache.spark.sql.Row;
+import org.apache.spark.sql.RowFactory;
+import org.apache.spark.sql.SparkSession;
+import org.apache.spark.sql.types.*;
+
+import java.util.ArrayList;
+import java.util.List;
+
+public class HeaderMappingExample {
+    public static void main(String[] args) {
+        // Create SparkSession
+        SparkSession spark = SparkSession.builder()
+                .appName("Header Mapping Example")
+                .master("local")
+                .getOrCreate();
+
+        // Create SparkContext
+        JavaSparkContext sc = new JavaSparkContext(spark.sparkContext());
+
+        // Load the first dataset and extract column names
+        String firstCsvPath = "File:///C://Users/Shash/OneDrive/Desktop/Test.csv";
+        StructType schema = extractSchemaFromCSV(spark, firstCsvPath);
+
+        // Load the second dataset
+        String secondCsvPath = "File:///C://Users/Shash/OneDrive/Desktop/Test2.csv";
+        JavaRDD<Row> secondDatasetRDD = spark.read()
+                .schema(schema)
+                .csv(secondCsvPath).javaRDD();
+
+        // Map each row of the second dataset to update column names
+        JavaRDD<Row> updatedSecondDatasetRDD = secondDatasetRDD.map(row -> {
+            // Create a new row with updated column names
+            List<Object> newRowValues = new ArrayList<>();
+            for (StructField field : schema.fields()) {
+                newRowValues.add(row.getAs(field.name()));
+            }
+            return RowFactory.create(newRowValues.toArray());
+        });
+
+        // Create DataFrame from the updated RDD
+        spark.createDataFrame(updatedSecondDatasetRDD, schema).show();
+
+        // Stop SparkSession
+        spark.stop();
+    }
+
+    private static StructType extractSchemaFromCSV(SparkSession spark, String csvPath) {
+        // Load the first dataset and extract schema
+        JavaRDD<Row> firstDatasetRDD = spark.read()
+                .option("header", "true")
+                .csv(csvPath).javaRDD();
+
+        // Extract schema from the first dataset
+        List<StructField> fields = new ArrayList<>();
+        for (String columnName : firstDatasetRDD.first().schema().fieldNames()) {
+            fields.add(DataTypes.createStructField(columnName, DataTypes.StringType, true));
+        }
+        return DataTypes.createStructType(fields);
+    }
+}
